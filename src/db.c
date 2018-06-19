@@ -239,8 +239,7 @@ int dbSyncDelete(redisDb *db, robj *key) {
 /* This is a wrapper whose behavior depends on the Redis lazy free
  * configuration. Deletes the key synchronously or asynchronously. */
 int dbDelete(redisDb *db, robj *key) {
-    return server.lazyfree_lazy_server_del ? dbAsyncDelete(db,key) :
-                                             dbSyncDelete(db,key);
+    
 }
 
 /* Prepare the string object stored at 'key' to be modified destructively
@@ -308,7 +307,7 @@ long long emptyDb(int dbnum, int flags, void(callback)(void*)) {
         if (dbnum != -1 && dbnum != j) continue;
         removed += dictSize(server.db[j].dict);
         if (async) {
-            emptyDbAsync(&server.db[j]);
+          
         } else {
             dictEmpty(server.db[j].dict,callback);
             dictEmpty(server.db[j].expires,callback);
@@ -316,7 +315,7 @@ long long emptyDb(int dbnum, int flags, void(callback)(void*)) {
     }
     if (server.cluster_enabled) {
         if (async) {
-            slotToKeyFlushAsync();
+        
         } else {
             slotToKeyFlush();
         }
@@ -417,14 +416,7 @@ void delGenericCommand(client *c, int lazy) {
 
     for (j = 1; j < c->argc; j++) {
         expireIfNeeded(c->db,c->argv[j]);
-        int deleted  = lazy ? dbAsyncDelete(c->db,c->argv[j]) :
-                              dbSyncDelete(c->db,c->argv[j]);
-        if (deleted) {
-            signalModifiedKey(c->db,c->argv[j]);
-        
-            server.dirty++;
-            numdel++;
-        }
+       
     }
     addReplyLongLong(c,numdel);
 }
@@ -1097,8 +1089,7 @@ int expireIfNeeded(redisDb *db, robj *key) {
     server.stat_expiredkeys++;
     propagateExpire(db,key,server.lazyfree_lazy_expire);
     
-    return server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
-                                         dbSyncDelete(db,key);
+   
 }
 
 /* -----------------------------------------------------------------------------

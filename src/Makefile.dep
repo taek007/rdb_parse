@@ -101,7 +101,7 @@ main.o: main.c server.h fmacros.h config.h solarisfixes.h rio.h sds.h \
  cJSON.h ../deps/lua/src/lua.h ../deps/lua/src/luaconf.h ae.h dict.h \
  adlist.h zmalloc.h anet.h ziplist.h intset.h version.h util.h latency.h \
  sparkline.h quicklist.h rax.h zipmap.h sha1.h endianconv.h crc64.h rdb.h \
- cluster.h slowlog.h bio.h atomicvar.h asciilogo.h
+ slowlog.h bio.h atomicvar.h
 memtest.o: memtest.c config.h
 module.o: module.c server.h fmacros.h config.h solarisfixes.h rio.h sds.h \
  cJSON.h ../deps/lua/src/lua.h ../deps/lua/src/luaconf.h ae.h dict.h \

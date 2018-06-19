@@ -1157,8 +1157,8 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
             long long expire;
 
             initStaticStringObject(key,keystr);
-            expire = getExpire(db,&key);
-            if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
+//            expire = getExpire(db,&key);
+//            if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
 
             /* When this RDB is produced as part of an AOF rewrite, move
              * accumulated diff from parent to child while rewriting in
@@ -1284,7 +1284,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
 
     server.dirty_before_bgsave = server.dirty;
     server.lastbgsave_try = time(NULL);
-    openChildInfoPipe();
+    
 
     start = ustime();
     if ((childpid = fork()) == 0) {
@@ -1304,16 +1304,16 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
             }
 
             server.child_info_data.cow_size = private_dirty;
-            sendChildInfo(CHILD_INFO_TYPE_RDB);
+         
         }
     
     } else {
         /* Parent */
         server.stat_fork_time = ustime()-start;
         server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024*1024*1024); /* GB per second. */
-        latencyAddSampleIfNeeded("fork",server.stat_fork_time/1000);
+      
         if (childpid == -1) {
-            closeChildInfoPipe();
+            
             server.lastbgsave_status = C_ERR;
             serverLog(LL_WARNING,"Can't save in background: fork: %s",
                 strerror(errno));
@@ -1323,7 +1323,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
         server.rdb_save_time_start = time(NULL);
         server.rdb_child_pid = childpid;
         server.rdb_child_type = RDB_CHILD_TYPE_DISK;
-        updateDictResizePolicy();
+//        updateDictResizePolicy();
         return C_OK;
     }
     return C_OK; /* unreached */
@@ -1636,7 +1636,7 @@ void rdbLoadProgressCallback(rio *r, const void *buf, size_t len) {
          * interaction time with clients and for other important things. */
 
         loadingProgress(r->processed_bytes);
-        processEventsWhileBlocked();
+        //processEventsWhileBlocked();
     }
 }
 
@@ -1769,10 +1769,10 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             continue;
         }
         /* Add the new object in the hash table */
-        dbAdd(db,key,val);
+//        dbAdd(db,key,val);
 
         /* Set the expire time if needed */
-        if (expiretime != -1) setExpire(NULL,db,key,expiretime);
+//        if (expiretime != -1) setExpire(NULL,db,key,expiretime);
 
         decrRefCount(key);
     }
@@ -1838,7 +1838,7 @@ void backgroundSaveDoneHandlerDisk(int exitcode, int bysignal) {
         latencyStartMonitor(latency);
         rdbRemoveTempFile(server.rdb_child_pid);
         latencyEndMonitor(latency);
-        latencyAddSampleIfNeeded("rdb-unlink-temp-file",latency);
+        
         /* SIGUSR1 is whitelisted, so we have a way to kill a child without
          * tirggering an error conditon. */
         if (bysignal != SIGUSR1)
@@ -1996,7 +1996,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
     }
 
     /* Create the child process. */
-    openChildInfoPipe();
+  
     start = ustime();
     if ((childpid = fork()) == 0) {
         /* Child */
@@ -2023,7 +2023,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
             }
 
             server.child_info_data.cow_size = private_dirty;
-            sendChildInfo(CHILD_INFO_TYPE_RDB);
+          
 
             /* If we are returning OK, at least one slave was served
              * with the RDB file as expected, so we need to send a report
@@ -2071,7 +2071,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
         /* Parent */
         server.stat_fork_time = ustime()-start;
         server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024*1024*1024); /* GB per second. */
-        latencyAddSampleIfNeeded("fork",server.stat_fork_time/1000);
+      
         if (childpid == -1) {
             serverLog(LL_WARNING,"Can't save in background: fork: %s",
                 strerror(errno));
@@ -2093,14 +2093,14 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
             }
             close(pipefds[0]);
             close(pipefds[1]);
-            closeChildInfoPipe();
+          
         } else {
             serverLog(LL_NOTICE,"Background RDB transfer started by pid %d",
                 childpid);
             server.rdb_save_time_start = time(NULL);
             server.rdb_child_pid = childpid;
             server.rdb_child_type = RDB_CHILD_TYPE_SOCKET;
-            updateDictResizePolicy();
+//            updateDictResizePolicy();
         }
         zfree(clientids);
         zfree(fds);

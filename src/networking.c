@@ -88,7 +88,7 @@ client *createClient(int fd) {
         }
     }
 
-    selectDb(c,0);
+//    selectDb(c,0);
     uint64_t client_id;
     atomicGetIncr(server.next_client_id,client_id,1);
     c->id = client_id;

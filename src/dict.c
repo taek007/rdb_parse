@@ -88,11 +88,11 @@ uint64_t siphash(const uint8_t *in, const size_t inlen, const uint8_t *k);
 uint64_t siphash_nocase(const uint8_t *in, const size_t inlen, const uint8_t *k);
 
 uint64_t dictGenHashFunction(const void *key, int len) {
-    return siphash(key,len,dict_hash_function_seed);
+ 
 }
 
 uint64_t dictGenCaseHashFunction(const unsigned char *buf, int len) {
-    return siphash_nocase(buf,len,dict_hash_function_seed);
+  
 }
 
 /* ----------------------------- API implementation ------------------------- */

@@ -1,3 +1,3 @@
-#define REDIS_GIT_SHA1 "11c29b3f"
-#define REDIS_GIT_DIRTY "576"
-#define REDIS_BUILD_ID "wxf-VirtualBox-1527752753"
+#define REDIS_GIT_SHA1 "61c4ad3a"
+#define REDIS_GIT_DIRTY "5936"
+#define REDIS_BUILD_ID "www.vwdpress.com-1529420152"

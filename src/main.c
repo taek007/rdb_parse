@@ -37,14 +37,12 @@
 #include <unistd.h>
 #include <getopt.h>
 
-static void
-rdb2jsonUsage(void)
+static void rdb2jsonUsage(void)
 {
     fprintf(stderr, "USAGE: ./rdbtools [-f file] -V -h\n");
     fprintf(stderr, "\t-V --version \n");
     fprintf(stderr, "\t-h --help show usage \n");
     fprintf(stderr, "\t-f --file specify which rdb file would be parsed.\n");
-    fprintf(stderr, "\t-s --file specify which lua script, default is ../scripts/example.lua\n");
     fprintf(stderr, "\t-d --dest specify which json file would be written.\n");
     fprintf(stderr, "\t Notice: This tool only test on redis 2.2 and 2.4, 2.6, 2.8.\n\n");
 }
@@ -91,19 +89,6 @@ mstime_t mstime(void) {
     return ustime()/1000;
 }
 
-
-
-/*====================== Hash table type implementation  ==================== */
-
-/* This is a hash table type that uses the SDS dynamic strings library as
- * keys and redis objects as values (objects can hold SDS strings,
- * lists, sets). */
-
-void dictVanillaFree(void *privdata, void *val)
-{
-    DICT_NOTUSED(privdata);
-    zfree(val);
-}
 
 void dictListDestructor(void *privdata, void *val)
 {
@@ -359,57 +344,8 @@ dictType replScriptCacheDictType = {
         NULL                        /* val destructor */
 };
 
-int htNeedsResize(dict *dict) {
-    long long size, used;
 
-    size = dictSlots(dict);
-    used = dictSize(dict);
-    return (size > DICT_HT_INITIAL_SIZE &&
-            (used*100/size < HASHTABLE_MIN_FILL));
-}
 
-/* If the percentage of used slots in the HT reaches HASHTABLE_MIN_FILL
- * we resize the hash table to save memory */
-void tryResizeHashTables(int dbid) {
-    if (htNeedsResize(server.db[dbid].dict))
-        dictResize(server.db[dbid].dict);
-    if (htNeedsResize(server.db[dbid].expires))
-        dictResize(server.db[dbid].expires);
-}
-
-/* Our hash table implementation performs rehashing incrementally while
- * we write/read from the hash table. Still if the server is idle, the hash
- * table will use two tables for a long time. So we try to use 1 millisecond
- * of CPU time at every call of this function to perform some rehahsing.
- *
- * The function returns 1 if some rehashing was performed, otherwise 0
- * is returned. */
-int incrementallyRehash(int dbid) {
-    /* Keys dictionary */
-    if (dictIsRehashing(server.db[dbid].dict)) {
-        dictRehashMilliseconds(server.db[dbid].dict,1);
-        return 1; /* already used our millisecond for this loop... */
-    }
-    /* Expires */
-    if (dictIsRehashing(server.db[dbid].expires)) {
-        dictRehashMilliseconds(server.db[dbid].expires,1);
-        return 1; /* already used our millisecond for this loop... */
-    }
-    return 0;
-}
-
-/* This function is called once a background process of some kind terminates,
- * as we want to avoid resizing the hash tables when there is a child in order
- * to play well with copy-on-write (otherwise when a resize happens lots of
- * memory pages are copied). The goal of this function is to update the ability
- * for dict.c to resize the hash tables accordingly to the fact we have o not
- * running childs. */
-void updateDictResizePolicy(void) {
-    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1)
-        dictEnableResize();
-    else
-        dictDisableResize();
-}
 
 void createSharedObjects(void) {
     int j;
@@ -444,18 +380,7 @@ extern char **environ;
 void initServer(void) {
     server.system_memory_size = zmalloc_get_memory_size();
     createSharedObjects();
-
-    server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
-    if (server.el == NULL) {
-        serverLog(LL_WARNING,
-                  "Failed creating the event loop. Error message: '%s'",
-                  strerror(errno));
-        exit(1);
-    }
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
-   
-    if (server.sofd > 0 && aeCreateFileEvent(server.el,server.sofd,AE_READABLE,
-                                             acceptUnixHandler,NULL) == AE_ERR) serverPanic("Unrecoverable error creating server.sofd file event.");
 }
 
 /* Function called at startup to load RDB or AOF file in memory. */

@@ -6,5 +6,5 @@ CFLAGS=
 LDFLAGS=
 REDIS_CFLAGS=
 REDIS_LDFLAGS=
-PREV_FINAL_CFLAGS=-std=c99 -pedantic -DREDIS_STATIC= -Wall -W -Wno-missing-field-initializers -O2 -g -ggdb -I../deps/hiredis -I../deps/linenoise -I../deps/lua/src -fPIC
-PREV_FINAL_LDFLAGS= -g -ggdb -rdynamic
+PREV_FINAL_CFLAGS=-std=c99 -pedantic -DREDIS_STATIC= -Wall -W -Wno-missing-field-initializers -O2 -g -ggdb -I/usr/local/include/glib-2.0 -I/usr/local/lib/glib-2.0/include -L/usr/local/lib -lglib-2.0 -I../deps/hiredis -I../deps/linenoise -I../deps/lua/src -fPIC
+PREV_FINAL_LDFLAGS= -g -ggdb -L/usr/local/lib -lglib-2.0 -rdynamic

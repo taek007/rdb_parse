@@ -1643,7 +1643,7 @@ void setTypeConvert(robj *subject, int enc);
 
 void hashTypeConvert(robj *o, int enc);
 /*rdb2json fix*/
-void myHashTypeConvert(robj *o, int enc, cJSON *root);
+void myHashTypeConvert(robj *o, int enc, cJSON *root, int flag);
 void hashTypeTryConversion(robj *subject, robj **argv, int start, int end);
 void hashTypeTryObjectEncoding(robj *subject, robj **o1, robj **o2);
 int hashTypeExists(robj *o, sds key);

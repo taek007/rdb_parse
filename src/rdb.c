@@ -2308,17 +2308,47 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 
         /* Load every single element of the list */
 		usage = sizeof(*o)+sizeof(quicklist);
+		elements = len;
+		
+		GString *str;
+//		cJSON* item, *items;
+		if( flag & PARSE_COMPLEX) {
+//			items = cJSON_CreateArray();
+			str =g_string_new(NULL);
+			g_string_append_c(str, '[');
+		}
+		
         while(len--) {
             if ((ele = rdbLoadEncodedStringObject(rdb)) == NULL) return NULL;
             dec = getDecodedObject(ele);
             size_t len = sdslen(dec->ptr);
-            quicklistPushTail(o->ptr, dec->ptr, len);
-            decrRefCount(dec);
-            decrRefCount(ele);
+//            quicklistPushTail(o->ptr, dec->ptr, len);
+//            decrRefCount(dec);
+//            decrRefCount(ele);
 			usage += sizeof(quicklistNode)+len;
 //			cJSON_AddStringToObject(root, "value", dec->ptr);
 //			cJSON_AddNumberToObject(root, "bytes", usage);
+			g_string_append_printf(str, "\"%s\",", dec->ptr);
+//			cJSON_AddItemToArray(items, item = cJSON_CreateObject());
+//			cJSON_AddStringToObject(item, "value",dec->ptr);
+
         }
+		
+
+		if( flag & PARSE_COMPLEX) {
+			GString *abc = g_string_truncate(str, strlen(str->str)-1); 
+			g_string_append_c(abc, ']');
+//			printf("%s\n", abc->str);
+			cJSON_AddStringToObject(root, "values", abc->str);
+//			g_string_free(str,TRUE);
+			g_string_free(abc,TRUE);
+
+//			cJSON_AddItemToObject(root, "value", items);
+
+			cJSON_AddNumberToObject(root, "bytes", usage);
+			cJSON_AddNumberToObject(root, "elements", elements);
+		}
+
     } else if (rdbtype == RDB_TYPE_SET) {
 		//intset 先不管
         /* Read Set value */
@@ -2591,6 +2621,42 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
                 o->type = OBJ_LIST;
                 o->encoding = OBJ_ENCODING_ZIPLIST;
                 listTypeConvert(o,OBJ_ENCODING_QUICKLIST);
+				
+				listTypeIterator *li = listTypeInitIterator(o, 0, LIST_TAIL);
+				listTypeEntry entry;
+				robj *list_entry;
+				
+
+				GString *str = NULL;
+				if( flag & PARSE_COMPLEX) {
+					str =g_string_new(NULL);
+					g_string_append_c(str, '[');
+				}
+
+				elements  = 0;
+				while(listTypeNext(li,&entry)) {
+					elements++;
+					list_entry = listTypeGet(&entry);
+//					printf("%s\n",list_entry->ptr);
+					usage += sdsAllocSize(list_entry->ptr);
+					g_string_append_printf(str, "\"%s\",", list_entry->ptr);
+				}   
+				listTypeReleaseIterator(li);
+				
+				if( flag & PARSE_COMPLEX) {
+					GString *abc = g_string_truncate(str, strlen(str->str)-1); 
+					g_string_append_c(abc, ']');
+//					printf("%s\n", abc->str);
+					cJSON_AddStringToObject(root, "value", abc->str);
+//					g_string_free(str,TRUE);
+					g_string_free(abc,TRUE);
+
+//					cJSON_AddItemToObject(root, "value", items);
+
+					cJSON_AddNumberToObject(root, "bytes", usage);
+					cJSON_AddNumberToObject(root, "elements", elements);
+				}
+
                 break;
             case RDB_TYPE_SET_INTSET:
                 o->type = OBJ_SET;
@@ -2698,7 +2764,7 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 //                serverLog(LL_NOTICE, "RDB_TYPE_HASH_ZIPLIST hashTypeLength: %d, hash_max_ziplist_entries: %d", hashTypeLength(o), server.hash_max_ziplist_entries);
 
                 if (hashTypeLength(o) > server.hash_max_ziplist_entries) {
-					//myHashTypeConvert(o, OBJ_ENCODING_HT, root);
+					myHashTypeConvert(o, OBJ_ENCODING_HT, root, flag);
                   //  char *s = cJSON_PrintUnformatted(root);
 //                    serverLog(LL_NOTICE, "RDB_TYPE_HASH_ZIPLIST: %s", s);
                 }
@@ -2725,8 +2791,8 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 		char *s = cJSON_PrintUnformatted(root);
 		char* res = (char*) malloc(sizeof(char)*strlen(s)+1);
 		replace_string(res, s, "\\", "");
-//  replace_string(res, res, "\"[", "[");
-//  replace_string(res, res, "\"]", "]");
+		replace_string(res, res, "\"[", "[");
+		replace_string(res, res, "]\"", "]");
 
 		cJSON_Delete(root);
 		fputs(res, dest);
@@ -2739,24 +2805,6 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 		fputs("\r\n", dest);
 		g_string_free(str,TRUE);
 	}
-
-//    serverLog(LL_NOTICE, ":) rdbtype:%d, output:%s", rdbtype, s);
-		
-		/*
-		dictEntry *he;
-		he = dictFind(new_dict, new_key);
-		//return he ? dictGetVal(he) : NULL;
-
-		unsigned int res = dictGetUnsignedIntegerVal(he);
-		dictReplace(new_dict, new_key, 12);
-*/
-
-		//usage = objectComputeSize(o, 50);
-	
-
-		//fprintf(dest, "%s,%d,%s\n", new_key, usage, type);
-	
-
     return o;
 }
 

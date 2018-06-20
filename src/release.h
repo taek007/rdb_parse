@@ -1,3 +1,3 @@
-#define REDIS_GIT_SHA1 "c866d0ef"
-#define REDIS_GIT_DIRTY "954"
-#define REDIS_BUILD_ID "www.vwdpress.com-1529481602"
+#define REDIS_GIT_SHA1 "ba5de1c2"
+#define REDIS_GIT_DIRTY "607"
+#define REDIS_BUILD_ID "www.vwdpress.com-1529497777"

@@ -29,7 +29,7 @@
 
 #include "server.h"
 #include <math.h>
-
+#include <glib.h>
 /*-----------------------------------------------------------------------------
  * Hash type API
  *----------------------------------------------------------------------------*/
@@ -488,7 +488,7 @@ void hashTypeConvertZiplist(robj *o, int enc) {
     }
 }
 
-void myHashTypeConvertZiplist(robj *o, int enc, cJSON *root) {
+void myHashTypeConvertZiplist(robj *o, int enc, cJSON *root, int flag) {
 	size_t elesize = 0;
     serverAssert(o->encoding == OBJ_ENCODING_ZIPLIST);
 
@@ -503,28 +503,32 @@ void myHashTypeConvertZiplist(robj *o, int enc, cJSON *root) {
         hi = hashTypeInitIterator(o);
       //  dict = dictCreate(&hashDictType, NULL);
 
-		char* itemsStr = "";
-		cJSON *items;
-		cJSON* item;
-        items = cJSON_CreateArray();
-
-		//item=cJSON_CreateObject();
-
 		int elements=0;
 		int elesize = 0;
+//		GString *str =g_string_new(NULL);
+		
+		 cJSON* item;
+		 if( flag & PARSE_COMPLEX) {
+			item = cJSON_CreateObject();
+		}
+
         while (hashTypeNext(hi) != C_ERR) {
 			elements++;
             sds key, value;
 
             key = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_KEY);
             value = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_VALUE);
-			elesize += strlen((char*)key);
 
-			elesize += strlen((char*)value);
+			elesize += sdsAllocSize(key);
+			elesize += sdsAllocSize(value);
 			elesize += sizeof(struct dictEntry);
 			
-			cJSON_AddItemToArray(items, item = cJSON_CreateObject());
-			cJSON_AddStringToObject(item, (char*)key, ((char*)value));
+			if( flag & PARSE_COMPLEX) {
+				//cJSON_AddItemToArray(items, item = cJSON_CreateObject());
+				cJSON_AddStringToObject(item, (char*)key, (char*)value);
+//				cJSON_AddNumberToObject(item, "score", score);
+//				g_string_append_printf(str, "{'%s':'%s'},", (char*)key, (char*)value);
+			}
 
 //serverLog(LL_NOTICE, "key: %s, value: %s", (char*)key, (char*)value);
 //            ret = dictAdd(dict, key, value);
@@ -535,9 +539,13 @@ void myHashTypeConvertZiplist(robj *o, int enc, cJSON *root) {
 //            }
         }
 
-		cJSON_AddItemToObject(root, "value", items);
-		cJSON_AddNumberToObject(root, "bytes", elesize);
-		cJSON_AddNumberToObject(root, "elements", elements);
+		if( flag & PARSE_COMPLEX) {
+//			cJSON_AddStringToObject(root, "values", str->str);
+//			g_string_free(str,TRUE);
+			cJSON_AddItemToObject(root, "value", item);
+			cJSON_AddNumberToObject(root, "bytes", elesize);
+			cJSON_AddNumberToObject(root, "elements", elements);
+		}
 		              
         hashTypeReleaseIterator(hi);
       //  zfree(o->ptr);
@@ -558,9 +566,9 @@ void hashTypeConvert(robj *o, int enc) {
     }
 }
 
-void myHashTypeConvert(robj *o, int enc, cJSON *root) {
+void myHashTypeConvert(robj *o, int enc, cJSON *root, int flag) {
     if (o->encoding == OBJ_ENCODING_ZIPLIST) {
-        myHashTypeConvertZiplist(o, enc, root);
+        myHashTypeConvertZiplist(o, enc, root, flag);
     } else if (o->encoding == OBJ_ENCODING_HT) {
         serverPanic("Not implemented");
     } else {

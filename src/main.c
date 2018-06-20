@@ -44,6 +44,7 @@ static void rdb2jsonUsage(void)
     fprintf(stderr, "\t-h --help show usage \n");
     fprintf(stderr, "\t-f --file specify which rdb file would be parsed.\n");
     fprintf(stderr, "\t-d --dest specify which json file would be written.\n");
+	fprintf(stderr, "\t-t --type specify which type  would be showen.\n");
     fprintf(stderr, "\t Notice: This tool only test on redis 2.2 and 2.4, 2.6, 2.8.\n\n");
 }
 
@@ -422,8 +423,11 @@ int main(int argc, char **argv) {
     char *lua_file = NULL;
     char *output_file = NULL;
     char *log_file = NULL;
-    int is_show_help = 0, is_show_version = 0;
-    char short_options [] = { "hVf:s:o:l:" };
+	char *exec_script = NULL;
+	char* compose_condi = NULL;
+	int type = 0;
+    int is_show_help = 0, is_show_version = 0, is_exec_script=0;
+    char short_options [] = { "ehVf:s:o:l:t:" };
 
     struct option long_options[] = {
             { "help", no_argument, NULL, 'h' }, /* help */
@@ -458,6 +462,12 @@ int main(int argc, char **argv) {
             case 'l':
                 log_file = optarg;
                 break;
+			case 't':
+                compose_condi = optarg;
+                break;
+			case 'e':
+                is_exec_script = 1;
+                break;
             default:
                 exit(0);
         }
@@ -476,8 +486,10 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING, "You must specify rdb file by option -f filepath.\n");
     }
     
-    if (!output_file) {
-        serverLog(LL_WARNING, "You must specify output file by option -o filepath.\n");
+    if (!output_file && !is_exec_script) {
+		rdb2jsonUsage();
+        fprintf(stderr, "You must specify output file by option -o filepath.\n");
+		exit(0);
     }
     if (!log_file) {
         serverLog(LL_WARNING, "Log file not specified, default path used: /tmp/rdbtools.log.\n");
@@ -486,12 +498,34 @@ int main(int argc, char **argv) {
         server.logfile = log_file;
     }
 
+	if(is_exec_script == 1) {
+		exec_script = "parse_txt.py";
+	}
+	
+	if(compose_condi == NULL) {
+		compose_condi = "simple";
+	}
+
+	if(compose_condi != NULL) {
+		if (!strcmp(compose_condi, "simple")){
+			type = PARSE_SIMPLE;
+		} else if (!strcmp(compose_condi, "complex")) {
+			type = PARSE_COMPLEX;
+		} else {
+			rdb2jsonUsage();
+			fprintf(stderr, "You must specify output type by option -t simple or complex.\n");
+			exit(0);
+		}
+	}
+
     if (access(rdb_file, R_OK) != 0) {
         serverLog(LL_WARNING, "rdb file %s is not exists.\n", rdb_file);
     }
     if (access(lua_file, R_OK) != 0) {
         serverLog(LL_WARNING, "lua file %s is not exists.\n", lua_file);
     }
+
+
 
     initServer();
 
@@ -502,9 +536,14 @@ int main(int argc, char **argv) {
 
     long long start = ustime();
     rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
-	if (myRdbLoad(server.rdb_filename, output_file, &rsi) == C_OK) {
-		serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",
-				  (float)(ustime()-start)/1000000);
+
+
+	if (myRdbLoad(server.rdb_filename, &rsi, output_file, type) == C_OK) {
+		serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",(float)(ustime()-start)/1000000);
+		if(is_exec_script == 1) {
+			call_python(exec_script);
+		}
+		
 	} else if (errno != ENOENT) {
 		serverLog(LL_WARNING,"Fatal error loading the DB: %s. Exiting.",strerror(errno));
 		exit(1);

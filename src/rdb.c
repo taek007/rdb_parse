@@ -32,6 +32,8 @@
 #include "zipmap.h"
 #include "endianconv.h"
 #include "util.h"
+
+#include <glib.h>
 #include <regex.h>  
 #include <unistd.h>
 #include <math.h>
@@ -1414,7 +1416,8 @@ robj * rdbLoadObject(int rdbtype, rio *rdb) {
         if ((zsetlen = rdbLoadLen(rdb,NULL)) == RDB_LENERR) return NULL;
         o = createZsetObject();
         zs = o->ptr;
-
+			
+		
         /* Load every single element of the sorted set. */
         while(zsetlen--) {
             sds sdsele;
@@ -1435,7 +1438,11 @@ robj * rdbLoadObject(int rdbtype, rio *rdb) {
 
             znode = zslInsert(zs->zsl,score,sdsele);
             dictAdd(zs->dict,sdsele,&znode->score);
+
+			
         }
+		
+		
 
         /* Convert *after* loading, since sorted sets are not stored ordered. */
         if (zsetLength(o) <= server.zset_max_ziplist_entries &&
@@ -2190,8 +2197,28 @@ void replace_string(char *result, char *source, char* s1, char *s2)
     strcpy(result, p);    
 }
 
+
+int createDir(char* path) {
+	if (access(path, 0) == -1)  {
+		//不存在才建立
+		if(mkdir(path , 0766)==0) {
+			printf("created the directory %s\n" , path);
+			return C_OK;
+		} else {
+			printf("can't creat the directoty %s\n", path);
+			printf("errno:%d\n",errno);
+			printf("ERR : %s\n",strerror(errno));
+			return C_ERR;
+		}
+	}
+	
+	
+
+}
 /*rdb2json fix*/
-robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest,   redisClient *cc ) {
+robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest,   int flag ) {
+
+
 //	cc->argv[1]="haha";
 //  cc->argc=5;
 //  cc->argv[2] = 1;
@@ -2200,11 +2227,12 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 //cc->querybuf="*4\r\n$7\r\mZINCRBY$4\r\nhaha\r\n$1\r\n1$4\r\nname\r\n";
 // processInputBuffer(cc);
 	size_t elesize;
-	size_t elements;
     robj *o = NULL, *ele, *dec;
     uint64_t len;
     unsigned int i;
 	size_t usage = 0;
+	size_t elements = 0;
+
 	//usage += sdsAllocSize(redis_key);
     //usage += sizeof(dictEntry);
 //	char* new_key = (char*) malloc(50*sizeof(char));
@@ -2214,11 +2242,13 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 		//printf("%s\n", new_key);
 
     /*rdb2json fix*/
+	cJSON *root;
+	GString *str =g_string_new(NULL);
+	if( flag & PARSE_COMPLEX) {
+		root = cJSON_CreateObject();
+		cJSON_AddStringToObject(root, "key", redis_key);
+	}
 
-	
-    cJSON *root;
-    root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "key", redis_key);
 	/*
 
     char *d = ":";
@@ -2244,19 +2274,29 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 
 //        o = tryObjectEncoding(o);
         o = myTryObjectEncoding(o, root, redis_key);
-       
+
 		if(o->encoding == OBJ_ENCODING_INT){
 			//printf(" key %s, len: %d, type: %d, value : %d\n", redis_key, usage, rdbtype, o->ptr);
 			usage = sizeof(*o);
-			cJSON_AddNumberToObject(root, "value", (int)o->ptr);
-			cJSON_AddNumberToObject(root, "bytes", usage);
+			elements = 1;
+
+			if( flag & PARSE_COMPLEX) {
+				cJSON_AddNumberToObject(root, "value", (int)o->ptr);
+				cJSON_AddNumberToObject(root, "bytes", usage);
+				cJSON_AddNumberToObject(root, "elements", elements);
+			}
+			
 		}else{
 			//printf(" key %s, len: %d, type: %d, value : %s\n", redis_key, usage, rdbtype, (char *)o->ptr);
 			usage = sdsAllocSize((char *)o->ptr)+ sizeof(*o);
-			cJSON_AddStringToObject(root, "value", (char *)o->ptr);
-			cJSON_AddNumberToObject(root, "bytes", usage);
+			elements = 1;
+			if( flag & PARSE_COMPLEX) {
+				cJSON_AddStringToObject(root, "value", (char *)o->ptr);
+				cJSON_AddNumberToObject(root, "bytes", usage);
+				cJSON_AddNumberToObject(root, "elements", elements);
+			}
 		}
-		cJSON_AddNumberToObject(root, "elements", 1);
+		
 
     } else if (rdbtype == RDB_TYPE_LIST) {
         /* Read list value */
@@ -2276,8 +2316,8 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
             decrRefCount(dec);
             decrRefCount(ele);
 			usage += sizeof(quicklistNode)+len;
-			cJSON_AddStringToObject(root, "value", dec->ptr);
-			cJSON_AddNumberToObject(root, "bytes", usage);
+//			cJSON_AddStringToObject(root, "value", dec->ptr);
+//			cJSON_AddNumberToObject(root, "bytes", usage);
         }
     } else if (rdbtype == RDB_TYPE_SET) {
 		//intset 先不管
@@ -2333,10 +2373,17 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 
 //        cJSON *items, *item;
 //        items = cJSON_CreateArray();
-
+		elements = zsetlen;
         /* Load every single element of the sorted set. */
+		
+		if( flag & PARSE_COMPLEX) {
+			
+		}
+
+//		usage = sizeof(*o) + sizeof(zset)+(sizeof(struct dictEntry*)*dictSlots(d));
+		usage = sizeof(*o) + sizeof(zset)+(sizeof(struct dictEntry*) * elements);
+
         while(zsetlen--) {
-			elements++;
 //			cJSON_AddItemToArray(items, item = cJSON_CreateObject());
 
             sds sdsele;
@@ -2354,22 +2401,39 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 
             /* Don't care about integer-encoded strings. */
             if (sdslen(sdsele) > maxelelen) maxelelen = sdslen(sdsele);
+			
+          //  znode = zslInsert(zs->zsl,score,sdsele);
+        //    dictAdd(zs->dict,sdsele,&znode->score);
+			
+//			printf("%s, %lf\n", (char*)sdsele, score);
+//            cJSON_AddItemToArray(items, item = cJSON_CreateObject());
+//			cJSON_AddNumberToObject(item, "score", score);
+//			cJSON_AddStringToObject(item, "value", (char*)sdsele);
 
-            znode = zslInsert(zs->zsl,score,sdsele);
-            dictAdd(zs->dict,sdsele,&znode->score);
+//            cJSON_AddItemToObject(item, "obj", cJSON_CreateString((char*)sdsele));
+//            cJSON_AddItemToObject(item, "t", cJSON_CreateNumber(znode->score));
 
-            //cJSON_AddItemToArray(items, item = cJSON_CreateObject());
-           // cJSON_AddItemToObject(item, "obj", cJSON_CreateString((char*)sdsele));
-           // cJSON_AddItemToObject(item, "t", cJSON_CreateNumber(znode->score));
+//			usage += sdsAllocSize(sdsele) + sizeof(struct dictEntry) + zmalloc_size(znode);
+			usage += sdsAllocSize(sdsele) + sizeof(struct dictEntry);
+			if( flag & PARSE_COMPLEX) {
+				g_string_append_printf(str, "{'value':'%s','score':%lf},", (char*)sdsele, score);
+			}
+			
         }
+		
+		if( flag & PARSE_COMPLEX) {
+			cJSON_AddStringToObject(root, "values", str->str);
+			g_string_free(str,TRUE);
+		}
 
-
-       // cJSON_AddItemToObject(root, redis_key, items);
+//		cJSON_AddItemToObject(root, "value", items);
+//		cJSON_AddNumberToObject(root, "bytes", 12);
+//		cJSON_AddNumberToObject(root, "elements", elements);
 
         /* Convert *after* loading, since sorted sets are not stored ordered. */
-        if (zsetLength(o) <= server.zset_max_ziplist_entries &&
-            maxelelen <= server.zset_max_ziplist_value)
-            zsetConvert(o,OBJ_ENCODING_ZIPLIST);
+	//        if (zsetLength(o) <= server.zset_max_ziplist_entries &&
+	//            maxelelen <= server.zset_max_ziplist_value)
+	//            zsetConvert(o,OBJ_ENCODING_ZIPLIST);
 		
 		//freeZsetObject(o);
     } else if (rdbtype == RDB_TYPE_HASH) {
@@ -2379,7 +2443,8 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 
         len = rdbLoadLen(rdb, NULL);
         if (len == RDB_LENERR) return NULL;
-
+		
+		elements = len;
         o = createHashObject();
 
         /* Too many entries? Use a hash table. */
@@ -2419,7 +2484,8 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
             sdsfree(field);
             sdsfree(value);
         }
-
+		
+		usage += sizeof(*o) + sizeof(dict)+(sizeof(struct dictEntry*)* len);
         /* Load remaining fields and values into the hash table */
         while (o->encoding == OBJ_ENCODING_HT && len > 0) {
             len--;
@@ -2433,18 +2499,26 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
            // cJSON_AddStringToObject(root,(char*)field,(char*)value);
 
             /* Add pair to hash table */
-            ret = dictAdd((dict*)o->ptr, field, value);
+//            ret = dictAdd((dict*)o->ptr, field, value);
+			usage += sdsAllocSize(field) + sdsAllocSize(value) + sizeof(struct dictEntry);
+			if( flag & PARSE_COMPLEX) {
+				g_string_append_printf(str, "{'key':'%s','value':%s},", (char*)field, (char*)value);
+			}
 
             sdsfree(field);
             sdsfree(value);
 
-            if (ret == DICT_ERR) {
-                rdbExitReportCorruptRDB("Duplicate keys detected");
-            }
+//            if (ret == DICT_ERR) {
+//                rdbExitReportCorruptRDB("Duplicate keys detected");
+//            }
         }
+		if( flag & PARSE_COMPLEX) {
+			cJSON_AddStringToObject(root, "values", str->str);
+			g_string_free(str,TRUE);
+		}
 //	freeHashObject(o);
         /* All pairs should be read by now */
-        serverAssert(len == 0);
+//        serverAssert(len == 0);
     } else if (rdbtype == RDB_TYPE_LIST_QUICKLIST) {
         if ((len = rdbLoadLen(rdb,NULL)) == RDB_LENERR) return NULL;
         o = createQuicklistObject();
@@ -2528,7 +2602,7 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
                 o->type = OBJ_ZSET;
                 o->encoding = OBJ_ENCODING_ZIPLIST;
 
-                char* itemsStr = "";
+                cJSON* item, * items;
 				
 
 //                if ( 0 && zsetLength(o) > server.zset_max_ziplist_entries) {
@@ -2539,9 +2613,9 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 					//myZsetConvert(o,root, OBJ_ENCODING_ZIPLIST);
 					 
                     if (o->encoding == OBJ_ENCODING_ZIPLIST) {
-						cJSON* item;
-				cJSON* items;
-				items = cJSON_CreateArray();
+						if( flag & PARSE_COMPLEX) {
+							items = cJSON_CreateArray();
+						}
 
                          char *zl = o->ptr;
                         unsigned char *eptr, *sptr;
@@ -2565,23 +2639,30 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 						elements = 0;
                         while ( eptr != NULL) {
 							elements++;
-							cJSON_AddItemToArray(items, item = cJSON_CreateObject());
+
+//							cJSON_AddItemToArray(items, item = cJSON_CreateObject());
 
                             score = zzlGetScore(sptr);
                             serverAssertWithInfo(NULL,o,ziplistGet(eptr,&vstr,&vlen,&vlong));
 							
                             if (vstr == NULL) {
                                 ele = sdsfromlonglong(vlong);
-								cJSON_AddStringToObject(item, "value", ele);
+//								cJSON_AddStringToObject(item, "value", ele);
 							}
                             else {
                                 ele = sdsnewlen((char*)vstr,vlen);
-								cJSON_AddStringToObject(item, "value", (char*)ele);
+//								cJSON_AddStringToObject(item, "value", (char*)ele);
 							}
 
 //                            node = zslInsert(zs->zsl,score,ele);
                             //serverAssert(dictAdd(zs->dict,ele,&node->score) == DICT_OK);
 							if (score > 0) {
+//								cJSON_AddNumberToObject(item, "score", score);
+							}
+
+							if( flag & PARSE_COMPLEX) {
+								cJSON_AddItemToArray(items, item = cJSON_CreateObject());
+								cJSON_AddStringToObject(item, "value", ele);
 								cJSON_AddNumberToObject(item, "score", score);
 							}
 
@@ -2595,10 +2676,14 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 //						char*b = cJSON_PrintUnformatted(items);
 						
 //						cJSON_AddStringToObject(root, "value", b);
-						cJSON_AddItemToObject(root, "value", items);
-						elesize = sizeof(*o)+(strlen(zl));
-						cJSON_AddNumberToObject(root, "bytes", elesize);
-						cJSON_AddNumberToObject(root, "elements", elements);
+						
+						usage = sizeof(*o)+(strlen(zl));
+
+						if( flag & PARSE_COMPLEX) {
+							cJSON_AddItemToObject(root, "value", items);
+							cJSON_AddNumberToObject(root, "bytes", elesize);
+							cJSON_AddNumberToObject(root, "elements", elements);
+						}
 
 //						zfree(o->ptr);
                     }
@@ -2633,22 +2718,27 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
         rdbExitReportCorruptRDB("Unknown RDB encoding type %d",rdbtype);
     }
 
-	
-	char* type= get_type(rdbtype);
+	if( flag & PARSE_COMPLEX) {
+		char* type= get_type(rdbtype);
 		cJSON_AddStringToObject(root, "type", strdup(type));
 	
-   char *s = cJSON_PrintUnformatted(root);
-   char* res = (char*) malloc(sizeof(char)*strlen(s)+1);
-   replace_string(res, s, "\\", "");
+		char *s = cJSON_PrintUnformatted(root);
+		char* res = (char*) malloc(sizeof(char)*strlen(s)+1);
+		replace_string(res, s, "\\", "");
 //  replace_string(res, res, "\"[", "[");
 //  replace_string(res, res, "\"]", "]");
 
-   cJSON_Delete(root);
-//      fputs(s, dest);
-    fputs(res, dest);
-    fputs("\r\n", dest);
-   free(s);
-   free(res);
+		cJSON_Delete(root);
+		fputs(res, dest);
+		fputs("\r\n", dest);
+		free(s);
+		free(res);
+	} else {
+		g_string_append_printf(str, "%s,%d", redis_key, usage);
+		fputs(str->str, dest);
+		fputs("\r\n", dest);
+		g_string_free(str,TRUE);
+	}
 
 //    serverLog(LL_NOTICE, ":) rdbtype:%d, output:%s", rdbtype, s);
 		
@@ -2682,7 +2772,7 @@ void getTypeKey (char* stbuf, int compKeyLen, char* rawKey) {
 
 
 
-int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi) {
+int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi, int flag) {
     uint64_t dbid;
     int type, rdbver;
     redisDb *db = server.db+0;
@@ -2705,8 +2795,6 @@ int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi) {
         return C_ERR;
     }
 
-//
-	redisClient *cc = zmalloc(sizeof(redisClient));
 
     while(1) {
         robj *key, *val;
@@ -2802,7 +2890,7 @@ int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi) {
         else {
             int matched = 0;
 
-            if ((val = myRdbLoadObjectCommon(type, rdb, (char*)key->ptr, dest, cc)) == NULL) {
+            if ((val = myRdbLoadObjectCommon(type, rdb, (char*)key->ptr, dest, flag)) == NULL) {
                 goto eoferr;
             } else {
                 matched = 1;
@@ -2859,19 +2947,66 @@ int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi) {
 
 
 
-int myRdbLoad(char *rdbfile, char *destfile, rdbSaveInfo *rsi) {
-    FILE *fp, *ofp, *afp;
+int myRdbLoad(char *rdbfile, rdbSaveInfo *rsi, char* output_file, int flag) {
+    FILE *fp, *ofp;
     rio rdb;
     int retval;
-	char* a="/tmp/1.txt";
+	GString *destfile, *dir;
+	if ( output_file == NULL){
+	
+		time_t t = time( 0 );  
+		char tmpBuf[BUFLEN];  
+		strftime(tmpBuf, BUFLEN, "%Y%m%d", localtime(&t)); //format date     and time.   
+		printf("time is [%s]",tmpBuf);
+
+		extern int errno;
+		dir=g_string_new(NULL);
+		g_string_printf(dir,"%s/%s", "/tmp/rdb",  tmpBuf);
+
+		if( createDir(dir->str) == C_ERR) {
+			return C_ERR;
+		}
+	
+		destfile=g_string_new(NULL);
+		g_string_printf(destfile,"%s/%s/%s", "/tmp/rdb",  tmpBuf, "rdb_parse.txt");
+		 if ((ofp = fopen(destfile->str, "w")) == NULL) return C_ERR;
+	} else {
+		 if ((ofp = fopen(output_file, "w")) == NULL) return C_ERR;
+	}
+
     if ((fp = fopen(rdbfile,"r")) == NULL) return C_ERR;
-    if ((ofp = fopen(destfile, "w")) == NULL) return C_ERR;
-	 if ((afp = fopen(a, "w")) == NULL) return C_ERR;
+   
+
     startLoading(fp);
     rioInitWithFile(&rdb,fp);
-    retval = myRdbLoadRio(&rdb, ofp, rsi);
+    retval = myRdbLoadRio(&rdb, ofp, rsi, flag);
+
+
     fclose(fp);
     fclose(ofp);
+	
+	if ( output_file == NULL) {
+		g_string_free(destfile, TRUE);
+		g_string_free(dir, TRUE);
+	}
     stopLoading();
     return retval;
+}
+
+
+int call_python(char* exec_script){
+    int status = 100;
+    int execres = 100;
+    //参数，/usr/bin/python前的“／“不要漏
+    char *argvlist[]={"/usr/bin/python", exec_script, NULL};
+    printf("start execute python\n");
+    if (fork()!=0){
+        waitpid(-1,&status,0);
+        printf("parent process finished, status is %d\n", status);
+    }else{
+        printf("child process\n");
+        execres = execve(argvlist[0], argvlist, NULL);
+        //如果调用execve成功的话，以下打印的东西是不可见的，因为exec会将原来进程中的内容全部替换掉
+        printf("child process runing, res is %d\n",execres);
+    }
 }

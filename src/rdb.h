@@ -35,7 +35,11 @@
 
 /* TBD: include only necessary headers. */
 #include "server.h"
+#include<time.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
+#define BUFLEN 255
 /* The current RDB version. When the format changes in a way that is no longer
  * backward compatible this number gets incremented. */
 #define RDB_VERSION 8
@@ -109,6 +113,11 @@
 #define RDB_SAVE_NONE 0
 #define RDB_SAVE_AOF_PREAMBLE (1<<0)
 
+//只生成 key_name, size
+#define PARSE_SIMPLE 1
+#define PARSE_COMPLEX 2
+
+
 int rdbSaveType(rio *rdb, unsigned char type);
 int rdbLoadType(rio *rdb);
 int rdbSaveTime(rio *rdb, time_t t);
@@ -139,8 +148,8 @@ int rdbLoadBinaryFloatValue(rio *rdb, float *val);
 int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi);
 
 /*rdb2json fix*/
-int myRdbLoad(char *rdbfile, char *destfile, rdbSaveInfo *rsi);
-int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi);
+int myRdbLoad(char *rdbfile, rdbSaveInfo *rsi, char* output_file, int flag);
+int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi, int flag);
 
 
 typedef struct redisClient {

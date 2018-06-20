@@ -548,20 +548,25 @@ robj *myTryObjectEncoding(robj *o, cJSON *root, char* redis_key) {
     }
 
 //    if (strcmp(redis_key, "matchlist") == 0) {
-    if (len != strlen((char *)o->ptr)) {
-        int thisi;
-        char * thisptr = (char *) o->ptr;
 
-        char hextotal[len * 2 + 1];
-        hextotal[0] = '\0';
-        char hexread[3];
-        for (thisi = 0; thisi < len; thisi++) {
-            sprintf(hexread, "%02x", 0xFF & thisptr[thisi]);
-            strcat(hextotal, hexread);
-        }
-//        printf("final hex: %s \n", hextotal);
-        cJSON_AddStringToObject(root, "hexval", hextotal);
-    } else {
+
+//    if (len != strlen((char *)o->ptr)) {
+//        int thisi;
+//        char * thisptr = (char *) o->ptr;
+//
+//        char hextotal[len * 2 + 1];
+//        hextotal[0] = '\0';
+//        char hexread[3];
+//        for (thisi = 0; thisi < len; thisi++) {
+//            sprintf(hexread, "%02x", 0xFF & thisptr[thisi]);
+//            strcat(hextotal, hexread);
+//        }
+////        printf("final hex: %s \n", hextotal);
+//        cJSON_AddStringToObject(root, "hexval", hextotal);
+//    } else 
+		
+	
+	{
 //        cJSON_AddStringToObject(root, "value", (char *)o->ptr);
 //		cJSON_AddNumberToObject(root, "bytes", strlen((char *)o->ptr));
 //		cJSON_AddNumberToObject(root, "elements", 1);

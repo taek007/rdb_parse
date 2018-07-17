@@ -351,11 +351,19 @@ dictType replScriptCacheDictType = {
 void createSharedObjects(void) {
     int j;
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
-        shared.integers[j] =
-                makeObjectShared(createObject(OBJ_STRING,(void*)(long)j));
+        shared.integers[j] = makeObjectShared(createObject(OBJ_STRING,(void*)(long)j));
         shared.integers[j]->encoding = OBJ_ENCODING_INT;
     }
 }
+
+void delteSharedObjects(void) {
+    int j;
+    for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
+        decrRefCount(shared.integers[j]);
+//        shared.integers[j]->encoding = OBJ_ENCODING_INT;
+    }
+}
+
 
 void initServerConfig(void) {
     server.port = CONFIG_DEFAULT_SERVER_PORT;
@@ -379,9 +387,9 @@ extern char **environ;
 
 
 void initServer(void) {
-    server.system_memory_size = zmalloc_get_memory_size();
+//    server.system_memory_size = zmalloc_get_memory_size();
     createSharedObjects();
-    server.db = zmalloc(sizeof(redisDb)*server.dbnum);
+//    server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 }
 
 /* Function called at startup to load RDB or AOF file in memory. */
@@ -423,11 +431,11 @@ int main(int argc, char **argv) {
     char *lua_file = NULL;
     char *output_file = NULL;
     char *log_file = NULL;
-	char *exec_script = NULL;
+	char *exec_script_file = NULL;
 	char* compose_condi = NULL;
 	int type = 0;
     int is_show_help = 0, is_show_version = 0, is_exec_script=0;
-    char short_options [] = { "ehVf:s:o:l:t:" };
+    char short_options [] = { "hVf:s:o:l:t:e:" };
 
     struct option long_options[] = {
             { "help", no_argument, NULL, 'h' }, /* help */
@@ -466,7 +474,7 @@ int main(int argc, char **argv) {
                 compose_condi = optarg;
                 break;
 			case 'e':
-                is_exec_script = 1;
+                exec_script_file = optarg;
                 break;
             default:
                 exit(0);
@@ -476,17 +484,20 @@ int main(int argc, char **argv) {
     if(is_show_version) {
         fprintf(stderr, "\nHELLO, THIS RDB PARSER VERSION 1.0\n\n");
     }
+
     if(is_show_help) {
         rdb2jsonUsage();
     }
+
     if(is_show_version || is_show_help) {
         exit(0);
     }
+
     if(!rdb_file) {
         serverLog(LL_WARNING, "You must specify rdb file by option -f filepath.\n");
     }
     
-    if (!output_file && !is_exec_script) {
+    if (!output_file && !exec_script_file) {
 		rdb2jsonUsage();
         fprintf(stderr, "You must specify output file by option -o filepath.\n");
 		exit(0);
@@ -498,9 +509,9 @@ int main(int argc, char **argv) {
         server.logfile = log_file;
     }
 
-	if(is_exec_script == 1) {
-		exec_script = "parse_txt.py";
-	}
+//	if(is_exec_script == 1) {
+//		exec_script = "parse_txt.py";
+//	}
 	
 	if(compose_condi == NULL) {
 		compose_condi = "simple";
@@ -521,9 +532,7 @@ int main(int argc, char **argv) {
     if (access(rdb_file, R_OK) != 0) {
         serverLog(LL_WARNING, "rdb file %s is not exists.\n", rdb_file);
     }
-    if (access(lua_file, R_OK) != 0) {
-        serverLog(LL_WARNING, "lua file %s is not exists.\n", lua_file);
-    }
+
 
 
 
@@ -537,18 +546,20 @@ int main(int argc, char **argv) {
     long long start = ustime();
     rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
 
-
-	if (myRdbLoad(server.rdb_filename, &rsi, output_file, type) == C_OK) {
+	char* log_dir = (char*)malloc(sizeof(char) * 100);
+	if (myRdbLoad(server.rdb_filename, &rsi, output_file, type, &log_dir) == C_OK) {
 		serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",(float)(ustime()-start)/1000000);
-		if(is_exec_script == 1) {
-			call_python(exec_script);
+		rdbShowGenericInfoMy();
+		if( NULL != exec_script_file) {
+			call_python(exec_script_file, log_dir);
+			free(log_dir);
 		}
 		
 	} else if (errno != ENOENT) {
 		serverLog(LL_WARNING,"Fatal error loading the DB: %s. Exiting.",strerror(errno));
 		exit(1);
 	}
-
+	delteSharedObjects();
     /* Warning the user about suspicious maxmemory setting. */
     if (server.maxmemory > 0 && server.maxmemory < 1024*1024) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);

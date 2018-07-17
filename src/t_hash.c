@@ -509,7 +509,7 @@ void myHashTypeConvertZiplist(robj *o, int enc, cJSON *root, int flag) {
 		
 		 cJSON* item;
 		 if( flag & PARSE_COMPLEX) {
-			item = cJSON_CreateObject();
+//			item = cJSON_CreateObject();
 		}
 
         while (hashTypeNext(hi) != C_ERR) {
@@ -525,10 +525,14 @@ void myHashTypeConvertZiplist(robj *o, int enc, cJSON *root, int flag) {
 			
 			if( flag & PARSE_COMPLEX) {
 				//cJSON_AddItemToArray(items, item = cJSON_CreateObject());
-				cJSON_AddStringToObject(item, (char*)key, (char*)value);
+//				cJSON_AddStringToObject(item, (char*)key, (char*)value);
+
+
 //				cJSON_AddNumberToObject(item, "score", score);
 //				g_string_append_printf(str, "{'%s':'%s'},", (char*)key, (char*)value);
 			}
+			sdsfree(key);
+			sdsfree(value);
 
 //serverLog(LL_NOTICE, "key: %s, value: %s", (char*)key, (char*)value);
 //            ret = dictAdd(dict, key, value);
@@ -540,11 +544,11 @@ void myHashTypeConvertZiplist(robj *o, int enc, cJSON *root, int flag) {
         }
 
 		if( flag & PARSE_COMPLEX) {
-//			cJSON_AddStringToObject(root, "values", str->str);
-//			g_string_free(str,TRUE);
-			cJSON_AddItemToObject(root, "value", item);
-			cJSON_AddNumberToObject(root, "bytes", elesize);
-			cJSON_AddNumberToObject(root, "elements", elements);
+////			cJSON_AddStringToObject(root, "values", str->str);
+////			g_string_free(str,TRUE);
+//			cJSON_AddItemToObject(root, "value", item);
+//			cJSON_AddNumberToObject(root, "bytes", elesize);
+//			cJSON_AddNumberToObject(root, "elements", elements);
 		}
 		              
         hashTypeReleaseIterator(hi);

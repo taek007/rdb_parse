@@ -2215,8 +2215,33 @@ int createDir(char* path) {
 	
 
 }
+
+struct {
+    unsigned long keys;             /* Number of keys processed. */
+    unsigned long expires;          /* Number of keys with an expire. */
+    unsigned long already_expired;  /* Number of keys already expired. */
+
+} rdbStateMy;
+
+void rdbShowGenericInfoMy(void) {
+    printf("[info] %lu keys read\n", rdbStateMy.keys);
+    printf("[info] %lu expires\n", rdbStateMy.expires);
+    printf("[info] %lu already expired\n", rdbStateMy.already_expired);
+}
+
+
+void  timestamp_str(long long time, char** result) {
+	time_t t;
+    struct tm *p;
+    t=1531302755682/1000 + 8*3600;
+    p=gmtime(&t);
+    char s[100];
+    strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S", p);
+	memcpy(*result, s, sizeof(s));
+}
+
 /*rdb2json fix*/
-robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest,   int flag ) {
+robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest,   int flag, long long expiretime ) {
 
 
 //	cc->argv[1]="haha";
@@ -2346,6 +2371,7 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 			cJSON_AddNumberToObject(root, "bytes", usage);
 			cJSON_AddNumberToObject(root, "elements", elements);
 		}
+		freeListObject(o);
 
     } else if (rdbtype == RDB_TYPE_SET) {
 		//intset 先不管
@@ -2389,6 +2415,7 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
                 sdsfree(sdsele);
             }
         }
+		freeSetObject(o);
     } else if (rdbtype == RDB_TYPE_ZSET_2 || rdbtype == RDB_TYPE_ZSET) {
 		
         /* Read list/set value. */
@@ -2445,6 +2472,7 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 				g_string_append_printf(str, "{\"value\":\"%s\",\"score\":%lf},", (char*)sdsele, score);
 //				g_string_append_printf(str, "{value:'%s',score:%lf},", (char*)sdsele, score);
 			}
+			sdsfree(sdsele);
 			
         }
 		
@@ -2470,7 +2498,7 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 	//            maxelelen <= server.zset_max_ziplist_value)
 	//            zsetConvert(o,OBJ_ENCODING_ZIPLIST);
 		
-		//freeZsetObject(o);
+		freeZsetObject(o);
     } else if (rdbtype == RDB_TYPE_HASH) {
         uint64_t len;
         int ret;
@@ -2551,7 +2579,8 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 			cJSON_AddStringToObject(root, "values", str->str);
 			g_string_free(str,TRUE);
 		}
-//	freeHashObject(o);
+
+		freeHashObject(o);
         /* All pairs should be read by now */
 //        serverAssert(len == 0);
     } else if (rdbtype == RDB_TYPE_LIST_QUICKLIST) {
@@ -2763,7 +2792,7 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
                 rdbExitReportCorruptRDB("Unknown RDB encoding type %d",rdbtype);
                 break;
         }
-	//	freeStringObject(o);
+		freeStringObject(o);
     } else if (rdbtype == RDB_TYPE_MODULE) {
        
     } else {
@@ -2790,9 +2819,21 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 			g_string_free(str,TRUE);
 			free(res);
 		} else {
-
 			
+			if ( -1 == expiretime ||  -2 == expiretime) {
+				cJSON_AddStringToObject(root, "expiretime", "none");
+			} else {
+			char* time  = (char*)malloc(sizeof(char)*100);
+			memset(time, 0, 100);
+			timestamp_str(expiretime, &time);
+			
+
+			cJSON_AddStringToObject(root, "expiretime", strdup(time));
+				free(time);
+			}
 			cJSON_AddStringToObject(root, "type", strdup(type));
+			
+			
 		
 			s = cJSON_PrintUnformatted(root);
 			res = (char*) malloc(sizeof(char)*strlen(s)+1);
@@ -2807,7 +2848,7 @@ robj *myRdbLoadObjectCommon(int rdbtype, rio *rdb, char *redis_key, FILE *dest, 
 			free(res);
 		}
 	} else {
-		g_string_append_printf(str, "%s,%d", redis_key, usage);
+		g_string_append_printf(str, "%s,%d,%d", redis_key, usage, elements);
 		fputs(str->str, dest);
 		fputs("\r\n", dest);
 		g_string_free(str,TRUE);
@@ -2945,13 +2986,14 @@ int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi, int flag) {
         else {
             int matched = 0;
 
-            if ((val = myRdbLoadObjectCommon(type, rdb, (char*)key->ptr, dest, flag)) == NULL) {
+            if ((val = myRdbLoadObjectCommon(type, rdb, (char*)key->ptr, dest, flag,  expiretime)) == NULL) {
                 goto eoferr;
             } else {
                 matched = 1;
             }
 
-
+			rdbStateMy.keys++;
+			freeStringObject(key);
             if (matched == 0) {
                 if ((val = rdbLoadObject(type,rdb)) == NULL) goto eoferr;
             }
@@ -2966,6 +3008,11 @@ int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi, int flag) {
         if (server.masterhost == NULL && expiretime != -1 && expiretime < now) {
             continue;
         }
+
+		if(expiretime != -1) {
+			rdbStateMy.already_expired++;
+		}
+
 
     }
     /* Verify the checksum if RDB version is >= 5 */
@@ -3002,7 +3049,7 @@ int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi, int flag) {
 
 
 
-int myRdbLoad(char *rdbfile, rdbSaveInfo *rsi, char* output_file, int flag) {
+int myRdbLoad(char *rdbfile, rdbSaveInfo *rsi, char* output_file, int flag, char** log_file) {
     FILE *fp, *ofp;
     rio rdb;
     int retval;
@@ -3011,12 +3058,14 @@ int myRdbLoad(char *rdbfile, rdbSaveInfo *rsi, char* output_file, int flag) {
 	
 		time_t t = time( 0 );  
 		char tmpBuf[BUFLEN];  
-		strftime(tmpBuf, BUFLEN, "%Y%m%d", localtime(&t)); //format date     and time.   
+		strftime(tmpBuf, BUFLEN, "%Y%m%d%H%M", localtime(&t)); //format date     and time.   
+		memcpy(*log_file,  tmpBuf, strlen(tmpBuf));
 		printf("time is [%s]",tmpBuf);
 
 		extern int errno;
 		dir=g_string_new(NULL);
 		g_string_printf(dir,"%s/%s", "/tmp/rdb",  tmpBuf);
+		
 
 		if( createDir(dir->str) == C_ERR) {
 			return C_ERR;
@@ -3049,11 +3098,11 @@ int myRdbLoad(char *rdbfile, rdbSaveInfo *rsi, char* output_file, int flag) {
 }
 
 
-int call_python(char* exec_script){
+int call_python(char* exec_script, char* log_dir){
     int status = 100;
     int execres = 100;
     //参数，/usr/bin/python前的“／“不要漏
-    char *argvlist[]={"/usr/bin/python", exec_script, NULL};
+    char *argvlist[]={"/usr/bin/python", exec_script, log_dir, NULL};
     printf("start execute python\n");
     if (fork()!=0){
         waitpid(-1,&status,0);

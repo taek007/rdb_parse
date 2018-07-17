@@ -148,7 +148,7 @@ int rdbLoadBinaryFloatValue(rio *rdb, float *val);
 int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi);
 
 /*rdb2json fix*/
-int myRdbLoad(char *rdbfile, rdbSaveInfo *rsi, char* output_file, int flag);
+int myRdbLoad(char *rdbfile, rdbSaveInfo *rsi, char* output_file, int flag, char** log_file);
 int myRdbLoadRio(rio *rdb, FILE *dest, rdbSaveInfo *rsi, int flag);
 
 
